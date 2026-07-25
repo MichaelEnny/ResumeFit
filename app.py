@@ -4,6 +4,7 @@ import streamlit as st
 
 from src.demo_fallback import find_cached_rewrite
 from src.document_parser import parse_uploaded_file
+from src.latex_export import build_pdf
 from src.question_generator import build_quiz_queue
 from src.resume_export import build_docx
 from src.rewriter import rewrite_resume_with_retry
@@ -181,12 +182,12 @@ elif st.session_state.stage == "done":
                 st.text(st.session_state.result)
 
         st.write("")
-        dl_col1, dl_col2, _ = st.columns([1, 1, 2])
+        dl_col1, dl_col2, dl_col3 = st.columns(3)
         with dl_col1:
             st.download_button(
                 "⬇ Download as TXT",
                 data=st.session_state.result,
-                file_name="resufit_resume.txt",
+                file_name="resumefit_resume.txt",
                 mime="text/plain",
                 use_container_width=True,
             )
@@ -194,10 +195,23 @@ elif st.session_state.stage == "done":
             st.download_button(
                 "⬇ Download as DOCX",
                 data=build_docx(st.session_state.result),
-                file_name="resufit_resume.docx",
+                file_name="resumefit_resume.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 use_container_width=True,
             )
+        with dl_col3:
+            try:
+                pdf_bytes = build_pdf(st.session_state.result)
+            except Exception as exc:
+                st.caption(f"PDF unavailable: {exc}")
+            else:
+                st.download_button(
+                    "⬇ Download as PDF",
+                    data=pdf_bytes,
+                    file_name="resumefit_resume.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
 
     st.divider()
     st.button("Start over", on_click=lambda: reset_state())

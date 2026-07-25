@@ -1,5 +1,6 @@
 """AI-as-a-service layer: sends the draft plus quiz answers to the OpenAI API for an ATS-safe rewrite."""
 import os
+import re
 import time
 
 from openai import OpenAI
@@ -14,6 +15,9 @@ Rules:
 - Do not invent employers, titles, dates, or achievements. If information is missing and was not
   provided in the clarifying answers, leave it out rather than guessing.
 - Use plain bullet points ("- ") for achievements, each starting with an action verb.
+- Do not use Markdown formatting of any kind (no **bold**, no _italic_, no # headers, no
+  markdown tables). Output is plain text that gets exported to TXT, DOCX, and PDF as-is, so
+  literal asterisks or underscores would show up in the final resume.
 """
 
 TEMPLATE_PROMPT = """Original draft:
@@ -23,6 +27,16 @@ Clarifying answers collected from the user:
 {answers}
 
 Rewrite this into an ATS-safe resume following the system rules exactly."""
+
+
+BOLD_MARKDOWN_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+
+
+def strip_markdown_emphasis(text: str) -> str:
+    """Removes **bold**/__bold__ markers the model adds despite being told not to,
+    so a slip in instruction-following doesn't leak literal asterisks/underscores
+    into the TXT, DOCX, and PDF exports."""
+    return BOLD_MARKDOWN_RE.sub(lambda m: m.group(1) or m.group(2), text)
 
 
 def format_answers(answers: dict[str, str]) -> str:
@@ -50,7 +64,7 @@ def rewrite_resume(
         messages=build_messages(draft, answers),
         temperature=0.3,
     )
-    return response.choices[0].message.content
+    return strip_markdown_emphasis(response.choices[0].message.content)
 
 
 def rewrite_resume_with_retry(

@@ -17,13 +17,21 @@ copy .env.example .env
 ```
 Then open `.env` and set `OPENAI_API_KEY` to a real key. `RESUFIT_MODEL` defaults to `gpt-4o-mini`. See `compare_models.py` below if you want to compare against `gpt-4o` before the demo.
 
+PDF export additionally requires a LaTeX distribution with `pdflatex` on PATH. This is a separate system install, not a pip package - if it isn't installed, TXT and DOCX downloads still work; the PDF button just reports it's unavailable instead of failing the whole page. To enable it:
+
+- **Windows**: install [MiKTeX](https://miktex.org/download) (the free "Basic MiKTeX Installer"). Default settings are fine - it installs `pdflatex` on PATH and fetches any missing packages automatically the first time it compiles.
+- **macOS**: install [MacTeX](https://tug.org/mactex/) (full, several GB) or [BasicTeX](https://tug.org/mactex/morepackages.html) (smaller; if you use BasicTeX, also run `sudo tlmgr install geometry fontenc lmodern enumitem` for the packages this app's template needs).
+- **Linux**: `sudo apt install texlive-latex-base texlive-latex-recommended texlive-latex-extra` (Debian/Ubuntu), or the equivalent `texlive` packages for your distro.
+
+After installing, open a **new** terminal (PATH changes don't apply to already-open ones) and confirm it worked with `pdflatex --version`. No app code or `requirements.txt` changes are needed either way - PDF generation shells out to whatever `pdflatex` it finds on PATH.
+
 ## Run
 ```
 streamlit run app.py
 ```
 
 ## Try it
-Paste the contents of `sample_data/messy_resume_example.txt` into the app, or upload it as a PDF/DOCX, to see the gap-detection, formatting-risk warnings, and quiz flow in action. The final result can be downloaded as TXT or DOCX.
+Paste the contents of `sample_data/messy_resume_example.txt` into the app, or upload it as a PDF/DOCX, to see the gap-detection, formatting-risk warnings, and quiz flow in action. The final result can be downloaded as TXT, DOCX, or PDF.
 
 ## How the quiz questions are chosen
 After you click Start, there's a brief "Analyzing your resume" step before the quiz begins. This makes a live API call, so it takes a couple seconds. The question queue blends two sources:
@@ -61,6 +69,7 @@ Heads up: `sample_data/` currently includes a real resume (`Michael O Eniolade.d
 - `src/rewriter.py`: AI-as-a-service layer. Builds the prompt, calls the OpenAI API for the ATS-safe rewrite, and retries once on failure.
 - `src/demo_fallback.py`: scans `sample_data/` for any draft resume matching the current input and serves its cached response if the live API is down (see Live-demo fallback above).
 - `src/resume_export.py`: converts the plain-text rewrite into a downloadable DOCX with proper headings and bullets.
+- `src/latex_export.py`: renders the same plain-text rewrite as a minimal single-column LaTeX document and compiles it to PDF via a local `pdflatex` (see PDF export above).
 - `src/session_state.py`: Streamlit session state setup and reset.
 - `src/sample_answers.py`: fixed quiz answers for `messy_resume_example.txt` specifically, used by `compare_models.py` for a realistic model comparison (unrelated to the generic fallback cache, which uses no quiz answers).
 - `sample_data/`: one or more sample or real resumes plus their cached fallback responses (`*.cached.txt`), used for testing, model comparison, and the live-demo fallback.
