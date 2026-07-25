@@ -8,7 +8,7 @@ in the same folder; see generate_cached_fallback.py for how that pairing is prod
 
 This only ever matches an exact bundled sample. There is no valid cached output for
 arbitrary input, so a genuine failure on a real user's own resume (typed in live, not one
-of the bundled files) still surfaces as an error (see FR16 in the PRD).
+of the bundled files) still surfaces as an error.
 """
 from pathlib import Path
 

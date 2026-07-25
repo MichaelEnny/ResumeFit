@@ -57,7 +57,7 @@ or for just one file:
 ```
 python generate_cached_fallback.py "some_resume.docx"
 ```
-Run this again whenever you add, remove, or edit a file in `sample_data/`. See `PRD.md` Section 13 for the full three-layer plan, including the manual video-backup step that still needs to be recorded before the demo.
+Run this again whenever you add, remove, or edit a file in `sample_data/`. The manual video-backup step (a recorded run of the full flow, for use if the whole environment fails) still needs to be captured before the demo.
 
 Heads up: `sample_data/` currently includes a real resume (`Michael O Eniolade.docx`) with real personal details. Worth deciding as a group whether that should be gitignored before this repo is shared with teammates or submitted, or swapped for a synthetic one like `messy_resume_example.txt`.
 
@@ -76,5 +76,3 @@ Heads up: `sample_data/` currently includes a real resume (`Michael O Eniolade.d
 - `.streamlit/config.toml`: high-contrast theme for the accessibility pass.
 - `compare_models.py`: side-by-side model comparison script on `messy_resume_example.txt` specifically (see above).
 - `generate_cached_fallback.py`: regenerates cached fallback responses for everything in `sample_data/` (see Live-demo fallback above).
-
-See `../PRD.md` for the full requirements and weekend milestone plan.
