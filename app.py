@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from src.demo_fallback import find_cached_rewrite
+from src.diff_view import render_diff
 from src.document_parser import parse_uploaded_file
 from src.latex_export import build_pdf
 from src.question_generator import build_quiz_queue
@@ -15,47 +16,85 @@ load_dotenv()
 st.set_page_config(page_title="ResumeFit", page_icon="📝", layout="wide")
 init_state()
 
+# The app defines both a light and a dark palette in .streamlit/config.toml
+# ([theme.light] / [theme.dark]); Streamlit's own Settings menu (top-right menu
+# button) switches between them and re-themes every native widget. Our own
+# injected CSS below doesn't get that for free, so it reads the currently
+# active theme from st.context and picks a matching accent palette.
+_active_theme = (st.context.theme.type or "light")
+if _active_theme == "dark":
+    _accent = "#6fa8d8"
+    _line = "#333c46"
+    _dot_border = "#333c46"
+    _dot_bg = "#1a1e24"
+    _dot_idle = "#9aa7b4"
+    _label = "#eaf1f9"
+    _label_upcoming = "#7a828b"
+    _dock_bg = "#1a1e24"
+    _diff_removed_bg = "rgba(248, 113, 113, 0.18)"
+    _diff_removed_text = "#fca5a5"
+    _diff_added_bg = "rgba(74, 222, 128, 0.18)"
+    _diff_added_text = "#86efac"
+else:
+    _accent = "#1a5276"
+    _line = "#d8dde3"
+    _dot_border = "#c7ccd2"
+    _dot_bg = "#ffffff"
+    _dot_idle = "#7a828b"
+    _label = "#3a3a3a"
+    _label_upcoming = "#8a929c"
+    _dock_bg = "#f2f2f2"
+    _diff_removed_bg = "rgba(211, 47, 47, 0.12)"
+    _diff_removed_text = "#b3261e"
+    _diff_added_bg = "rgba(46, 125, 50, 0.12)"
+    _diff_added_text = "#1b5e20"
+
 # Accessibility + visual pass: readable base font, visible keyboard focus ring,
 # and a professional polish pass on buttons, the status widget, and the sidebar stepper.
 st.markdown(
-    """
+    f"""
     <style>
-    html, body, [class*="css"] { font-size: 17px; }
-    *:focus { outline: 3px solid #1a5276 !important; outline-offset: 2px; }
-    h1, h2, h3 { letter-spacing: -0.01em; }
-    div[data-testid="stChatMessage"] { border-radius: 10px; }
+    html, body, [class*="css"] {{ font-size: 17px; }}
+    *:focus {{ outline: 3px solid {_accent} !important; outline-offset: 2px; }}
+    h1, h2, h3 {{ letter-spacing: -0.01em; }}
+    div[data-testid="stChatMessage"] {{ border-radius: 10px; }}
 
     div[data-testid="stButton"] button,
-    div[data-testid="stDownloadButton"] button {
+    div[data-testid="stDownloadButton"] button {{
         border-radius: 8px;
         font-weight: 600;
-        transition: transform 0.12s ease, box-shadow 0.12s ease;
-    }
-    div[data-testid="stButton"] button:hover,
-    div[data-testid="stDownloadButton"] button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 10px rgba(26, 82, 118, 0.18);
-    }
-    div[data-testid="stDownloadButton"] button[kind="primary"] {
+    }}
+    @media (prefers-reduced-motion: no-preference) {{
+        div[data-testid="stButton"] button,
+        div[data-testid="stDownloadButton"] button {{
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }}
+        div[data-testid="stButton"] button:hover,
+        div[data-testid="stDownloadButton"] button:hover {{
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(26, 82, 118, 0.18);
+        }}
+    }}
+    div[data-testid="stDownloadButton"] button[kind="primary"] {{
         box-shadow: 0 2px 6px rgba(26, 82, 118, 0.25);
-    }
-    div[data-testid="stStatusWidget"] {
+    }}
+    div[data-testid="stStatusWidget"] {{
         border-radius: 10px;
-    }
+    }}
 
-    .rf-stepper { padding-left: 2px; margin-top: 4px; }
-    .rf-step { position: relative; padding: 4px 0 4px 32px; }
-    .rf-step:not(:last-child)::before {
+    .rf-stepper {{ padding-left: 2px; margin-top: 4px; }}
+    .rf-step {{ position: relative; padding: 4px 0 4px 32px; }}
+    .rf-step:not(:last-child)::before {{
         content: "";
         position: absolute;
         left: 11px;
         top: 26px;
         bottom: -4px;
         width: 2px;
-        background: #d8dde3;
-    }
-    .rf-step.done:not(:last-child)::before { background: #1a5276; }
-    .rf-step-dot {
+        background: {_line};
+    }}
+    .rf-step.done:not(:last-child)::before {{ background: {_accent}; }}
+    .rf-step-dot {{
         position: absolute;
         left: 0;
         top: 3px;
@@ -67,19 +106,54 @@ st.markdown(
         justify-content: center;
         font-size: 0.72rem;
         font-weight: 700;
-        border: 2px solid #c7ccd2;
-        background: #ffffff;
-        color: #7a828b;
-    }
-    .rf-step.done .rf-step-dot { background: #1a5276; border-color: #1a5276; color: #ffffff; }
-    .rf-step.active .rf-step-dot {
-        border-color: #1a5276;
-        color: #1a5276;
-        box-shadow: 0 0 0 3px rgba(26, 82, 118, 0.15);
-    }
-    .rf-step-label { font-size: 0.92rem; color: #3a3a3a; line-height: 1.6; }
-    .rf-step.active .rf-step-label { font-weight: 700; color: #1a5276; }
-    .rf-step.upcoming .rf-step-label { color: #8a929c; }
+        border: 2px solid {_dot_border};
+        background: {_dot_bg};
+        color: {_dot_idle};
+    }}
+    .rf-step.done .rf-step-dot {{ background: {_accent}; border-color: {_accent}; color: #ffffff; }}
+    .rf-step.active .rf-step-dot {{
+        border-color: {_accent};
+        color: {_accent};
+        box-shadow: 0 0 0 3px rgba(111, 168, 216, 0.25);
+    }}
+    .rf-step-label {{ font-size: 0.92rem; color: {_label}; line-height: 1.6; }}
+    .rf-step.active .rf-step-label {{ font-weight: 700; color: {_accent}; }}
+    .rf-step.upcoming .rf-step-label {{ color: {_label_upcoming}; }}
+
+    div.st-key-theme_dock {{
+        position: sticky;
+        bottom: 0;
+        background: {_dock_bg};
+        padding-top: 10px;
+        margin-top: 12px;
+    }}
+
+    .rf-diff-text {{
+        white-space: pre-wrap;
+        font-family: "Cascadia Code", Consolas, monospace;
+        font-size: 0.85rem;
+        line-height: 1.55;
+    }}
+    .rf-diff-removed {{
+        background: {_diff_removed_bg};
+        color: {_diff_removed_text};
+        text-decoration: line-through;
+        border-radius: 3px;
+        padding: 0 1px;
+    }}
+    .rf-diff-added {{
+        background: {_diff_added_bg};
+        color: {_diff_added_text};
+        border-radius: 3px;
+        padding: 0 1px;
+    }}
+    .rf-diff-legend {{
+        display: flex;
+        gap: 18px;
+        font-size: 0.82rem;
+        color: {_label};
+        margin-bottom: 10px;
+    }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -123,6 +197,15 @@ with st.sidebar:
         "Rule-based gap detection runs locally; question analysis and the final rewrite "
         "both call the OpenAI API."
     )
+
+    with st.container(key="theme_dock"):
+        with st.popover("⚙️ Theme", use_container_width=True):
+            st.caption(f"Currently viewing: **{_active_theme.capitalize()} mode**")
+            st.write(
+                "Switch it from the menu in the top-right corner of the app "
+                "(⋮ → Settings → Choose app theme). Streamlit re-themes every "
+                "widget automatically from there."
+            )
 
 st.title("ResumeFit")
 st.caption("Paste a messy resume draft. ResumeFit asks a few questions, then rewrites it into ATS-safe format.")
@@ -186,11 +269,17 @@ elif st.session_state.stage == "quiz":
     st.progress(idx / len(gaps), text=f"Question {min(idx + 1, len(gaps))} of {len(gaps)}")
 
     with st.container(border=True):
-        for question, answer in st.session_state.answers.items():
+        for i, gap in enumerate(gaps[:idx]):
             with st.chat_message("assistant"):
-                st.write(question)
+                st.write(gap.question)
             with st.chat_message("user"):
-                st.write(answer)
+                ans_col, edit_col = st.columns([6, 1])
+                with ans_col:
+                    st.write(st.session_state.answers.get(gap.question, "_(skipped)_"))
+                with edit_col:
+                    if st.button("✎", key=f"edit_{i}", help="Edit this answer"):
+                        st.session_state.current_gap_index = i
+                        st.rerun()
 
         if idx < len(gaps):
             gap = gaps[idx]
@@ -198,15 +287,36 @@ elif st.session_state.stage == "quiz":
                 st.write(gap.question)
 
     if idx < len(gaps):
-        answer = st.chat_input("Your answer (or type 'skip')")
+        answer = st.chat_input("Your answer")
         if answer:
-            if answer.strip().lower() != "skip":
-                st.session_state.answers[gap.question] = answer
+            st.session_state.answers[gap.question] = answer
             st.session_state.current_gap_index += 1
             st.rerun()
+
+        nav_col1, nav_col2, _ = st.columns([1, 1, 3])
+        with nav_col1:
+            if st.button("◀ Back", disabled=idx == 0, use_container_width=True):
+                st.session_state.current_gap_index -= 1
+                st.rerun()
+        with nav_col2:
+            if st.button("Skip ➔", use_container_width=True):
+                st.session_state.answers.pop(gap.question, None)
+                st.session_state.current_gap_index += 1
+                st.rerun()
     else:
         st.success("All questions answered.", icon="✅")
-        st.button("Generate ATS-safe resume ➔", type="primary", on_click=lambda: st.session_state.update(stage="rewriting"))
+        end_col1, end_col2, _ = st.columns([1, 2, 2])
+        with end_col1:
+            if st.button("◀ Back", use_container_width=True):
+                st.session_state.current_gap_index -= 1
+                st.rerun()
+        with end_col2:
+            st.button(
+                "Generate ATS-safe resume ➔",
+                type="primary",
+                on_click=lambda: st.session_state.update(stage="rewriting"),
+                use_container_width=True,
+            )
 
 elif st.session_state.stage == "rewriting":
     st.subheader(STEP_LABELS["rewriting"])
@@ -245,15 +355,23 @@ elif st.session_state.stage == "done":
                 "prepared in advance for the demo, not a fresh live rewrite.",
                 icon="ℹ️",
             )
+        diff_before, diff_after = render_diff(st.session_state.draft, st.session_state.result)
+        st.markdown(
+            '<div class="rf-diff-legend">'
+            '<span><span class="rf-diff-removed">removed</span> from the original</span>'
+            '<span><span class="rf-diff-added">added</span> in the rewrite</span>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
         col1, col2 = st.columns(2, gap="medium")
         with col1:
             st.markdown("**Original draft**")
             with st.container(border=True, height=420):
-                st.text(st.session_state.draft)
+                st.markdown(f'<div class="rf-diff-text">{diff_before}</div>', unsafe_allow_html=True)
         with col2:
             st.markdown("**ATS-safe rewrite**")
             with st.container(border=True, height=420):
-                st.text(st.session_state.result)
+                st.markdown(f'<div class="rf-diff-text">{diff_after}</div>', unsafe_allow_html=True)
 
         st.write("")
         with st.container(border=True):
@@ -266,6 +384,7 @@ elif st.session_state.stage == "done":
                     file_name="resumefit_resume.txt",
                     mime="text/plain",
                     use_container_width=True,
+                    on_click=lambda: st.toast("Downloading TXT...", icon="📄"),
                 )
                 st.caption("Plain text, works everywhere")
             with dl_col2:
@@ -275,6 +394,7 @@ elif st.session_state.stage == "done":
                     file_name="resumefit_resume.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True,
+                    on_click=lambda: st.toast("Downloading DOCX...", icon="📝"),
                 )
                 st.caption("Editable in Word or Google Docs")
             with dl_col3:
@@ -290,8 +410,22 @@ elif st.session_state.stage == "done":
                         mime="application/pdf",
                         type="primary",
                         use_container_width=True,
+                        on_click=lambda: st.toast("Downloading PDF...", icon="🧾"),
                     )
                     st.caption("Print-ready, LaTeX-typeset, ATS-safe")
 
     st.divider()
-    st.button("Start over", on_click=lambda: reset_state())
+
+    def _confirm_and_reset() -> None:
+        reset_state()
+        st.session_state.confirm_reset = False
+
+    if st.session_state.get("confirm_reset"):
+        st.warning("This clears your draft, answers, and result. Are you sure?", icon="⚠️")
+        confirm_col1, confirm_col2, _ = st.columns([1, 1, 3])
+        with confirm_col1:
+            st.button("Yes, start over", type="primary", on_click=_confirm_and_reset)
+        with confirm_col2:
+            st.button("Cancel", on_click=lambda: st.session_state.update(confirm_reset=False))
+    else:
+        st.button("Start over", on_click=lambda: st.session_state.update(confirm_reset=True))
